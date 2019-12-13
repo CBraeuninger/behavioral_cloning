@@ -1,6 +1,10 @@
 import cv2
+import math
 import numpy as np
-from read_images import get_lines
+from data_set import DataSet
+from sample import Sample
+from data_generator import generator
+from sklearn.model_selection import train_test_split
 
 '''
 Load the data
@@ -10,45 +14,31 @@ Load the data
 correction_factor = 0.2
 
 # Read in data supplied by Udacity
-udacity_lines = get_lines('../../../opt/carnd_p3/data/driving_log.csv')
-#images, measurements = read_full_data_set('../../../opt/carnd_p3/data/driving_log.csv',
-#                                          '../../../opt/carnd_p3/data/', correction_factor)
-
+udacity_data = DataSet('../../../opt/carnd_p3/data/driving_log.csv')
+                        
 # Read in addtionally collected data (allows the model to learn how to disengage from the borders)
-add_lines = get_lines('additional_data/driving_log.csv')
-#add_images, add_measurements = read_full_data_set('additional_data/driving_log.csv',
-#                                                  '../../..', correction_factor)
-
-images.extend(add_images)
-measurements.extend(add_measurements)
+add_data = DataSet('additional_data/driving_log.csv')
 
 # Read in data collected while driving counter-clockwise
-counter_images, counter_measurements = read_full_data_set('counter_clockwise/driving_log.csv',
-                                                          '../../..', correction_factor)
+counter_data = DataSet('counter_clockwise/driving_log.csv')
 
-images.extend(counter_images)
-measurements.extend(counter_measurements)
-    
-'''
-Data augmentation
-'''
+samples = []
 
-flipped_images = []
-flipped_measurements = []
+for line in udacity_data.get_lines():
+    samples.append(Sample(line, '../../../opt/carnd_p3/data/', correction_factor))
 
-# Generate additional data by flipping the image and taking the negative of the steering wheel angle
-#for i in range(len(images)):
-#    flipped_image = np.fliplr(images[i])
-#    flipped_images.append(flipped_image)
-#    flipped_measurement = - measurements[i]
-#    flipped_measurements.append(flipped_measurement)
+for line in add_data.get_lines():
+    samples.append(Sample(line, '../../..', correction_factor))
 
-concat_images = images #+ flipped_images
-concat_measurements = measurements #+ flipped_measurements
+for line in counter_data.get_lines():
+    samples.append(Sample(line, '../../..', correction_factor))
+                   
+train_samples, validation_samples = train_test_split(samples, test_size=0.2)
 
-# Concatenate original and flipped data to get the complete training/validation set
-X_train = np.array(concat_images)
-y_train = np.array(concat_measurements)
+batch_size = 32
+
+train_generator = generator(train_samples, batch_size=batch_size)
+validation_generator = generator(validation_samples, batch_size=batch_size)
 
 '''
 Define and train the model
@@ -73,7 +63,10 @@ model.add(Dense(10))
 model.add(Dense(1))
 
 model.compile(loss='mse', optimizer='adam')
-model.fit(X_train, y_train, validation_split=0.2, shuffle=True, epochs=7)
+model.fit_generator(train_generator, steps_per_epoch=math.ceil(len(train_samples)/batch_size),
+            validation_data=validation_generator,
+            validation_steps=math.ceil(len(validation_samples)/batch_size),
+            epochs=7, verbose=1)
 
 model.save('model.h5')
           
